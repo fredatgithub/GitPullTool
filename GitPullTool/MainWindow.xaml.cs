@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Xml.Serialization;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.Window;
 
 namespace GitPullTool
 {
@@ -42,7 +43,8 @@ namespace GitPullTool
           Width = Width,
           Height = Height,
           Left = Left,
-          Top = Top
+          Top = Top,
+          SourcePath = SourcePath.Text
         };
 
         var serializer = new XmlSerializer(typeof(WindowSettings));
@@ -79,6 +81,7 @@ namespace GitPullTool
           Height = settings.Height;
           Left = settings.Left;
           Top = settings.Top;
+          SourcePath.Text = settings.SourcePath;
         }
       }
       catch { }
@@ -98,37 +101,33 @@ namespace GitPullTool
       Results.Clear();
       var path = SourcePath.Text;
 
-
       if (!Directory.Exists(path))
       {
         MessageBox.Show("Invalid path");
         return;
       }
 
-
-      var repos = Directory.GetDirectories(path)
-      .Where(d => Directory.Exists(Path.Combine(d, ".git")))
-      .ToList();
-
+      RunButton.IsEnabled = false;
+      var repos = Directory.GetDirectories(path).Where(d => Directory.Exists(Path.Combine(d, ".git"))).ToList();
 
       int total = repos.Count;
       int processed = 0;
 
-
       await Task.WhenAll(repos.Select(repo => Task.Run(() => ProcessRepo(repo, total, () => processed++))));
+      RunButton.IsEnabled = true;
     }
 
     private void ProcessRepo(string repo, int total, Action increment)
     {
-      var result = new RepoResult();
-      result.Repo = repo;
-
+      var result = new RepoResult
+      {
+        Repo = repo
+      };
 
       try
       {
         var status = RunGitCommand("status -sb", repo);
         result.Branch = status.Split('\n').FirstOrDefault();
-
 
         if (status.Contains(" M ") || status.Contains("??"))
         {
@@ -142,12 +141,11 @@ namespace GitPullTool
           result.Status = "OK";
         }
       }
-      catch (Exception ex)
+      catch (Exception exception)
       {
         result.Status = "ERROR";
-        result.Message = ex.Message;
+        result.Message = exception.Message;
       }
-
 
       Dispatcher.Invoke(() =>
       {
@@ -177,7 +175,9 @@ namespace GitPullTool
         process.WaitForExit();
 
         if (process.ExitCode != 0)
+        {
           throw new Exception(process.StandardError.ReadToEnd());
+        }
         
         return output;
       }
